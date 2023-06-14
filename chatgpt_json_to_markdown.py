@@ -45,6 +45,17 @@ def _get_title(title, first_message):
     first_line = content.split("\n", 1)[0]
     return first_line.rstrip() + "..."
 
+def _get_creation_date(config, message):
+    if not message:
+        return None
+    
+    creation_date_str = message.get("create_time")
+    if not creation_date_str:
+        return None
+
+    date = datetime.fromtimestamp(creation_date_str)
+    return date
+
 def process_conversations(data, output_dir, config):
     for conversation in tqdm(data, desc="Processing conversations"):
         title = conversation["title"]
@@ -63,10 +74,11 @@ def process_conversations(data, output_dir, config):
         file_name = f"{config['file_name_format'].format(title=title.replace(' ', '_').replace('/', '_'))}.md"
         file_path = os.path.join(output_dir, file_name)
 
+        creation_date = _get_creation_date(config, messages[0])
         with open(file_path, "w", encoding="utf-8") as f:
-            if messages and messages[0]["create_time"] is not None and config['include_date']:
-                date = datetime.fromtimestamp(messages[0]["create_time"]).strftime(config['date_format'])
-                f.write(f"<sub>{date}</sub>{config['message_separator']}")
+            if creation_date is not None and config['include_date']:
+                date_str = datetime.fromtimestamp(messages[0]["create_time"]).strftime(config['date_format'])
+                f.write(f"<sub>{date_str}</sub>{config['message_separator']}")
 
             for message in messages:
                 author_role = message["author"]["role"]
@@ -74,6 +86,9 @@ def process_conversations(data, output_dir, config):
                 author_name = config['user_name'] if author_role == "user" else config['assistant_name']
                 if not config['skip_empty_messages'] or content.strip():
                     f.write(f"**{author_name}**: {content}{config['message_separator']}")
+
+        if creation_date is not None:
+            os.utime(file_path, (creation_date.timestamp(), creation_date.timestamp()))
 
 def main():
     config_path = "config.json"
